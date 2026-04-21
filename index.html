@@ -151,8 +151,7 @@
     overflow: hidden;
     transition: border-color 0.15s;
   }
-  .project-card.drag-over { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
-  .project-card.dragging { opacity: 0.45; }
+
 
   .card-header {
     display: flex; align-items: center; gap: 10px;
@@ -162,11 +161,17 @@
   }
   .card-header:hover { background: #faf9f7; }
 
-  .drag-handle {
-    color: var(--text-faint); font-size: 16px; cursor: grab;
-    flex-shrink: 0; padding: 0 4px 0 0; line-height: 1;
+  .reorder-btns {
+    display: flex; flex-direction: column; gap: 2px; flex-shrink: 0;
   }
-  .drag-handle:active { cursor: grabbing; }
+  .reorder-btn {
+    font-family: 'DM Sans', sans-serif;
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text-faint);
+    cursor: pointer; font-size: 10px; line-height: 1;
+    padding: 3px 5px; transition: all 0.15s;
+  }
+  .reorder-btn:hover { border-color: var(--border-strong); color: var(--text); background: var(--bg); }
 
   .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .dot-active { background: #3a8a4a; }
@@ -189,7 +194,7 @@
 
   .card-meta {
     font-size: 11px; color: var(--text-faint);
-    padding: 0 16px 12px 52px; margin-top: -4px;
+    padding: 0 16px 12px 58px; margin-top: -4px;
   }
 
   .chevron {
@@ -351,7 +356,6 @@ const DEFAULT_PROJECTS = [
 let projects = [];
 let filter = 'all';
 let editingId = null;
-let dragSrcId = null;
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
 
@@ -484,30 +488,19 @@ function daysLeft(d){
   return Math.ceil((new Date(d+'T12:00:00') - new Date()) / 86400000);
 }
 
-// Drag and drop
-function onDragStart(e, id){
-  dragSrcId = id;
-  e.dataTransfer.effectAllowed = 'move';
-  setTimeout(()=>{ const el=document.getElementById('card-'+id); if(el) el.classList.add('dragging'); }, 0);
+function moveUp(id, e){
+  e.stopPropagation();
+  const i = projects.findIndex(x=>x.id===id);
+  if(i<=0) return;
+  [projects[i-1], projects[i]] = [projects[i], projects[i-1]];
+  persist(); render();
 }
-function onDragEnd(e, id){
-  document.querySelectorAll('.project-card').forEach(c=>c.classList.remove('dragging','drag-over'));
-}
-function onDragOver(e, id){
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  document.querySelectorAll('.project-card').forEach(c=>c.classList.remove('drag-over'));
-  if(id !== dragSrcId){ const el=document.getElementById('card-'+id); if(el) el.classList.add('drag-over'); }
-}
-function onDrop(e, id){
-  e.preventDefault();
-  if(!dragSrcId || dragSrcId===id) return;
-  const si = projects.findIndex(x=>x.id===dragSrcId);
-  const ti = projects.findIndex(x=>x.id===id);
-  if(si<0||ti<0) return;
-  const [item] = projects.splice(si,1);
-  projects.splice(ti,0,item);
-  dragSrcId = null;
+
+function moveDown(id, e){
+  e.stopPropagation();
+  const i = projects.findIndex(x=>x.id===id);
+  if(i>=projects.length-1) return;
+  [projects[i], projects[i+1]] = [projects[i+1], projects[i]];
   persist(); render();
 }
 
@@ -535,14 +528,12 @@ function render(){
     const metaParts = [dlStr, lastEntry ? `Updated ${lastEntry.date}` : ''].filter(Boolean).join(' · ');
     const recentLog = log.slice(0,5);
 
-    return `<div class="project-card${p.expanded?' expanded':''}" id="card-${p.id}"
-        draggable="true"
-        ondragstart="onDragStart(event,'${p.id}')"
-        ondragend="onDragEnd(event,'${p.id}')"
-        ondragover="onDragOver(event,'${p.id}')"
-        ondrop="onDrop(event,'${p.id}')">
+    return `<div class="project-card${p.expanded?' expanded':''}" id="card-${p.id}">
       <div class="card-header" onclick="toggleExpand('${p.id}')">
-        <span class="drag-handle" onclick="event.stopPropagation()" title="Drag to reorder">⠿</span>
+        <div class="reorder-btns" onclick="event.stopPropagation()">
+          <button class="reorder-btn" onclick="moveUp('${p.id}',event)" title="Move up">▲</button>
+          <button class="reorder-btn" onclick="moveDown('${p.id}',event)" title="Move down">▼</button>
+        </div>
         <div class="status-dot dot-${p.status}"></div>
         <span class="project-name">${p.name}</span>
         <span class="badge badge-${p.status}">${p.status}</span>
